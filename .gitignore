@@ -1,0 +1,36 @@
+# ---------------[ Unity generated ]------------------ #
+[Aa]pps/
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Ss]treamingAssets/
+[Ss]treamingAssets.meta
+UnityGenerated/
+  
+# ----[ Visual Studio / MonoDevelop generated ]------- #
+  
+ExportedObj/
+*.svd
+*.userprefs
+*.csproj
+*.pidb
+*.suo
+*.sln
+*.user
+*.unityproj
+*.booproj
+[Uu]nityVS/
+[Uu]nityVS.meta
+  
+# -------------[ OS generated ]------------------------ #
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+ehthumbs.db
+Thumbs.db
+
+# ----------------[ Other ]---------------------------- #
+Unity4.3.4.txt
