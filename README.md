@@ -10,7 +10,7 @@ Supports GIF87a or GIF89a format. (Animation, Transparent, Interlaced, etc)
 
 It is made with Unity4.3.4 (Mac, Win, Android, iOS), work probably also in other versions.
 
-![GIFAnimSample](http://westhillapps.ddo.jp/images/a10.gif)
+![GIFAnimSample](https://raw.githubusercontent.com/WestHillApps/westhillapps.github.io/master/res/unigif_sample.gif)
 
 How To Use
 -------
