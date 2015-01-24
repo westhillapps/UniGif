@@ -16,24 +16,20 @@ public static partial class UniGif
     /// <summary>
     /// Decode to textures from GIF data
     /// </summary>
-    /// <param name="gifData">ref GIF data</param>
+    /// <param name="gifData">GIF data</param>
     /// <param name="gifTexList">GIF texture list</param>
     /// <param name="filterMode">Textures filter mode</param>
     /// <param name="wrapMode">Textures wrap mode</param>
-    /// <param name="debugLog">Debug Log Flag</param>
-    /// <returns>Result</returns>
-    static bool DecodeTexture (ref GifData gifData, List<GifTexture> gifTexList, FilterMode filterMode, TextureWrapMode wrapMode, bool debugLog)
+    /// <returns>IEnumerator</returns>
+    static IEnumerator DecodeTextureCoroutine (GifData gifData, Action<List<GifTexture>> cb, FilterMode filterMode, TextureWrapMode wrapMode)
     {
         if (gifData.imageBlockList == null || gifData.imageBlockList.Count < 1) {
-            return false;
+            yield break;
         }
 
-        Color32? bgColor = null;
-        if (gifData.globalColorTableFlag) {
-            // Set background color from global color table
-            byte[] bgRgb = gifData.globalColorTable[gifData.bgColorIndex];
-            bgColor = new Color32 (bgRgb[0], bgRgb[1], bgRgb[2], 255);
-        }
+        List<GifTexture> gifTexList = new List<GifTexture> ();
+
+        Color32? bgColor = GetGlobalBgColor (gifData);
 
         // Disposal Method
         // 0 (No disposal specified)
@@ -42,127 +38,98 @@ public static partial class UniGif
         // 3 (Restore to previous)
         ushort disposalMethod = 0;
 
-        int index = 0;
+        int imgBlockIndex = 0;
         foreach (var imgBlock in gifData.imageBlockList) {
-            // Get GraphicControlExtension
-            GraphicControlExtension? graphicCtrlEx = null;
-            if (gifData.graphicCtrlExList != null && gifData.graphicCtrlExList.Count > index) {
-                graphicCtrlEx = gifData.graphicCtrlExList[index];
-            }
+            var decodedData = GetDecodedData (imgBlock);
 
-            // Combine LZW compressed data
-            List<byte> lzwData = new List<byte> ();
-            foreach (var imageData in imgBlock.imageDataList) {
-                foreach (var data in imageData.imageData) {
-                    lzwData.Add (data);
-                }
-            }
+            var colorTable = GetColorTable (gifData, imgBlock, ref bgColor);
 
-            // LZW decode
-            int needDataSize = imgBlock.imageHeight * imgBlock.imageWidth;
-            byte[] decodedData = DecodeGifLZW (lzwData, imgBlock.LzwMinimumCodeSize, needDataSize);
+            var graphicCtrlEx = GetGraphicCtrlExt (gifData, imgBlockIndex);
 
-            // Sort interlace GIF
-            if (imgBlock.interlaceFlag) {
-                decodedData = SortInterlaceGifData (decodedData, imgBlock.imageWidth);
-            }
+            int transparentIndex = GetTransparentIndex (graphicCtrlEx);
 
-            // Create texture
-            Texture2D tex = new Texture2D (gifData.logicalScreenWidth, gifData.logicalScreenHeight, TextureFormat.ARGB32, false);
-            tex.filterMode = filterMode;
-            tex.wrapMode = wrapMode;
+            // avoid lock up
+            yield return 0;
 
-            // Set color table (local or global)
-            var colorTable = imgBlock.localColorTableFlag ? imgBlock.localColorTable : gifData.globalColorTable;
-
-            if (imgBlock.localColorTableFlag) {
-                // Set background color from local color table
-                byte[] bgRgb = imgBlock.localColorTable[gifData.bgColorIndex];
-                bgColor = new Color32 (bgRgb[0], bgRgb[1], bgRgb[2], 255);
-            }
-
-            // Set transparent color index
-            int transparentIndex = -1;
-            if (graphicCtrlEx != null && graphicCtrlEx.Value.transparentColorFlag) {
-                transparentIndex = graphicCtrlEx.Value.transparentColorIndex;
-            }
-
-            // Check dispose
             bool useBeforeTex = false;
-            int beforeIndex = -1;
-            if (index > 0 && disposalMethod == 0 || disposalMethod == 1) {
-                // before 1
-                beforeIndex = index - 1;
-            } else if (index > 1 && disposalMethod == 3) {
-                // before 2
-                beforeIndex = index - 2;
-            }
-            if (beforeIndex >= 0) {
-                // Do not dispose
-                useBeforeTex = true;
-                Color32[] pix = gifTexList[beforeIndex].texture2d.GetPixels32 ();
-                tex.SetPixels32 (pix);
-                tex.Apply ();
-            }
+            var tex = CreateTexture2D (gifData, gifTexList, imgBlockIndex, disposalMethod, filterMode, wrapMode, ref useBeforeTex);
 
             // Set pixel data
             int dataIndex = 0;
             // Reverse set pixels. because GIF data starts from the top left.
             for (int y = tex.height - 1; y >= 0; y--) {
-                // Row no (0~)
-                int row = tex.height - 1 - y;
+                SetTexturePixelRow (tex, y, imgBlock, decodedData, ref dataIndex, colorTable, bgColor, transparentIndex, useBeforeTex);
 
-                for (int x = 0; x < tex.width; x++) {
-                    // Line no (0~)
-                    int line = x;
-
-                    // Out of image blocks
-                    if (row < imgBlock.imageTopPosition ||
-                        row >= imgBlock.imageTopPosition + imgBlock.imageHeight ||
-                        line < imgBlock.imageLeftPosition ||
-                        line >= imgBlock.imageLeftPosition + imgBlock.imageWidth) {
-                        if (useBeforeTex == false && bgColor != null) {
-                            tex.SetPixel (x, y, bgColor.Value);
-                        }
-                        continue;
-                    }
-
-                    // Out of decoded data
-                    if (dataIndex >= decodedData.Length) {
-                        tex.SetPixel (x, y, Color.black);
-                        // Debug.LogError ("dataIndex exceeded the size of decodedData. dataIndex:" + dataIndex + " decodedData.Length:" + decodedData.Length + " y:" + y + " x:" + x);
-                        dataIndex++;
-                        continue;
-                    }
-
-                    // Get pixel color from color table
-                    byte colorIndex = decodedData[dataIndex];
-                    if (colorTable == null || colorTable.Count <= colorIndex) {
-                        Debug.LogError ("colorIndex exceeded the size of colorTable. colorTable.Count:" + colorTable.Count + " colorIndex:" + colorIndex);
-                        dataIndex++;
-                        continue;
-                    }
-                    byte[] rgb = colorTable[colorIndex];
-
-                    // Set alpha
-                    byte alpha = transparentIndex >= 0 && transparentIndex == colorIndex ? (byte) 0 : (byte) 255;
-
-                    if (alpha != 0 || useBeforeTex == false) {
-                        Color32 col = new Color32 (rgb[0], rgb[1], rgb[2], alpha);
-                        tex.SetPixel (x, y, col);
-                    }
-
-                    dataIndex++;
+                // avoid lock up
+                if (y % 10 == 0) {
+                    yield return 0;
                 }
             }
             tex.Apply ();
 
-            // Get delay sec from GraphicControlExtension
-            float delaySec = graphicCtrlEx != null ? (float) graphicCtrlEx.Value.delayTime / 100f : 0.1f;
-            // Minimum 0.1 seconds delay (because major browsers have become so...)
-            if (delaySec < 0.1f) {
-                delaySec = 0.1f;
+            float delaySec = GetDelaySec (graphicCtrlEx);
+
+            // Add to GIF texture list
+            gifTexList.Add (new GifTexture (tex, delaySec));
+
+            disposalMethod = GetDisposalMethod (graphicCtrlEx);
+
+            imgBlockIndex++;
+
+            // avoid lock up
+            yield return 0;
+        }
+
+        if (cb != null) {
+            cb (gifTexList);
+        }
+    }
+
+    /// <summary>
+    /// Decode to textures from GIF data
+    /// </summary>
+    /// <param name="gifData">GIF data</param>
+    /// <param name="gifTexList">GIF texture list</param>
+    /// <param name="filterMode">Textures filter mode</param>
+    /// <param name="wrapMode">Textures wrap mode</param>
+    /// <returns>Result</returns>
+    static bool DecodeTexture (GifData gifData, List<GifTexture> gifTexList, FilterMode filterMode, TextureWrapMode wrapMode)
+    {
+        if (gifData.imageBlockList == null || gifData.imageBlockList.Count < 1) {
+            return false;
+        }
+
+        Color32? bgColor = GetGlobalBgColor(gifData);
+        
+        // Disposal Method
+        // 0 (No disposal specified)
+        // 1 (Do not dispose)
+        // 2 (Restore to background color)
+        // 3 (Restore to previous)
+        ushort disposalMethod = 0;
+
+        int imgBlockIndex = 0;
+        foreach (var imgBlock in gifData.imageBlockList) {
+            var decodedData = GetDecodedData (imgBlock);
+
+            var colorTable = GetColorTable (gifData, imgBlock, ref bgColor);
+
+            var graphicCtrlEx = GetGraphicCtrlExt (gifData, imgBlockIndex);
+
+            int transparentIndex = GetTransparentIndex (graphicCtrlEx);
+
+            bool useBeforeTex = false;
+            var tex = CreateTexture2D (gifData, gifTexList, imgBlockIndex, disposalMethod, filterMode, wrapMode, ref useBeforeTex);
+
+            // Set pixel data
+            int dataIndex = 0;
+            // Reverse set pixels. because GIF data starts from the top left.
+            for (int y = tex.height - 1; y >= 0; y--) {
+                SetTexturePixelRow (tex, y, imgBlock, decodedData, ref dataIndex, colorTable, bgColor, transparentIndex, useBeforeTex);
             }
+            tex.Apply ();
+
+            float delaySec = GetDelaySec (graphicCtrlEx);
 
             // Add to GIF texture list
             if (gifTexList == null) {
@@ -170,14 +137,201 @@ public static partial class UniGif
             }
             gifTexList.Add (new GifTexture (tex, delaySec));
 
-            // Get disposal method from GraphicControlExtension
-            disposalMethod = graphicCtrlEx != null ? graphicCtrlEx.Value.disposalMethod : (ushort) 2;
+            disposalMethod = GetDisposalMethod (graphicCtrlEx);
 
-            index++;
+            imgBlockIndex++;
         }
 
         return true;
     }
+
+    #region Call from DecodeTexture methods
+
+    /// <summary>
+    /// Get background color from global color table
+    /// </summary>
+    static Color32? GetGlobalBgColor (GifData gifData)
+    {
+        Color32? bgColor = null;
+        if (gifData.globalColorTableFlag) {
+            // Set background color from global color table
+            byte[] bgRgb = gifData.globalColorTable[gifData.bgColorIndex];
+            bgColor = new Color32 (bgRgb[0], bgRgb[1], bgRgb[2], 255);
+        }
+        return bgColor;
+    }
+
+    /// <summary>
+    /// Get decoded image data from ImageBlock
+    /// </summary>
+    static byte[] GetDecodedData (ImageBlock imgBlock)
+    {
+        // Combine LZW compressed data
+        List<byte> lzwData = new List<byte> ();
+        foreach (var imageData in imgBlock.imageDataList) {
+            foreach (var data in imageData.imageData) {
+                lzwData.Add (data);
+            }
+        }
+
+        // LZW decode
+        int needDataSize = imgBlock.imageHeight * imgBlock.imageWidth;
+        byte[] decodedData = DecodeGifLZW (lzwData, imgBlock.LzwMinimumCodeSize, needDataSize);
+
+        // Sort interlace GIF
+        if (imgBlock.interlaceFlag) {
+            decodedData = SortInterlaceGifData (decodedData, imgBlock.imageWidth);
+        }
+        return decodedData;
+    }
+
+    /// <summary>
+    /// Get color table (local or global)
+    /// </summary>
+    static List<byte[]> GetColorTable (GifData gifData, ImageBlock imgBlock, ref Color32? bgColor)
+    {
+        var colorTable = imgBlock.localColorTableFlag ? imgBlock.localColorTable : gifData.globalColorTable;
+
+        if (imgBlock.localColorTableFlag) {
+            // Set background color from local color table
+            byte[] bgRgb = imgBlock.localColorTable[gifData.bgColorIndex];
+            bgColor = new Color32 (bgRgb[0], bgRgb[1], bgRgb[2], 255);
+        }
+
+        return colorTable;
+    }
+
+    /// <summary>
+    /// Get GraphicControlExtension from GifData
+    /// </summary>
+    static GraphicControlExtension? GetGraphicCtrlExt (GifData gifData, int imgBlockIndex)
+    {
+        if (gifData.graphicCtrlExList != null && gifData.graphicCtrlExList.Count > imgBlockIndex) {
+            return gifData.graphicCtrlExList[imgBlockIndex];
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Get transparent color index from GraphicControlExtension
+    /// </summary>
+    static int GetTransparentIndex (GraphicControlExtension? graphicCtrlEx)
+    {
+        int transparentIndex = -1;
+        if (graphicCtrlEx != null && graphicCtrlEx.Value.transparentColorFlag) {
+            transparentIndex = graphicCtrlEx.Value.transparentColorIndex;
+        }
+        return transparentIndex;
+    }
+
+    /// <summary>
+    /// Get delay seconds from GraphicControlExtension
+    /// </summary>
+    static float GetDelaySec (GraphicControlExtension? graphicCtrlEx)
+    {
+        // Get delay sec from GraphicControlExtension
+        float delaySec = graphicCtrlEx != null ? (float) graphicCtrlEx.Value.delayTime / 100f : 0.1f;
+        // Minimum 0.1 seconds delay (because major browsers have become so...)
+        if (delaySec < 0.1f) {
+            delaySec = 0.1f;
+        }
+        return delaySec;
+    }
+
+    /// <summary>
+    /// Get disposal method from GraphicControlExtension
+    /// </summary>
+    static ushort GetDisposalMethod (GraphicControlExtension? graphicCtrlEx)
+    {
+        return graphicCtrlEx != null ? graphicCtrlEx.Value.disposalMethod : (ushort) 2;
+    }
+
+    /// <summary>
+    /// Create Texture2D object and initial settings
+    /// </summary>
+    static Texture2D CreateTexture2D (GifData gifData, List<GifTexture> gifTexList, int imgBlockIndex, ushort disposalMethod, FilterMode filterMode, TextureWrapMode wrapMode, ref bool useBeforeTex)
+    {
+        // Create texture
+        Texture2D tex = new Texture2D (gifData.logicalScreenWidth, gifData.logicalScreenHeight, TextureFormat.ARGB32, false);
+        tex.filterMode = filterMode;
+        tex.wrapMode = wrapMode;
+
+        // Check dispose
+        useBeforeTex = false;
+        int beforeIndex = -1;
+        if (imgBlockIndex > 0 && disposalMethod == 0 || disposalMethod == 1) {
+            // before 1
+            beforeIndex = imgBlockIndex - 1;
+        } else if (imgBlockIndex > 1 && disposalMethod == 3) {
+            // before 2
+            beforeIndex = imgBlockIndex - 2;
+        }
+        if (beforeIndex >= 0) {
+            // Do not dispose
+            useBeforeTex = true;
+            Color32[] pix = gifTexList[beforeIndex].texture2d.GetPixels32 ();
+            tex.SetPixels32 (pix);
+            tex.Apply ();
+        }
+
+        return tex;
+    }
+
+    /// <summary>
+    /// Set texture pixel row
+    /// </summary>
+    static void SetTexturePixelRow (Texture2D tex, int y, ImageBlock imgBlock, byte[] decodedData, ref int dataIndex, List<byte[]> colorTable, Color32? bgColor, int transparentIndex, bool useBeforeTex)
+    {
+        // Row no (0~)
+        int row = tex.height - 1 - y;
+
+        for (int x = 0; x < tex.width; x++) {
+            // Line no (0~)
+            int line = x;
+
+            // Out of image blocks
+            if (row < imgBlock.imageTopPosition ||
+                row >= imgBlock.imageTopPosition + imgBlock.imageHeight ||
+                line < imgBlock.imageLeftPosition ||
+                line >= imgBlock.imageLeftPosition + imgBlock.imageWidth) {
+                if (useBeforeTex == false && bgColor != null) {
+                    tex.SetPixel (x, y, bgColor.Value);
+                }
+                continue;
+            }
+
+            // Out of decoded data
+            if (dataIndex >= decodedData.Length) {
+                tex.SetPixel (x, y, Color.black);
+                // Debug.LogError ("dataIndex exceeded the size of decodedData. dataIndex:" + dataIndex + " decodedData.Length:" + decodedData.Length + " y:" + y + " x:" + x);
+                dataIndex++;
+                continue;
+            }
+
+            // Get pixel color from color table
+            byte colorIndex = decodedData[dataIndex];
+            if (colorTable == null || colorTable.Count <= colorIndex) {
+                Debug.LogError ("colorIndex exceeded the size of colorTable. colorTable.Count:" + colorTable.Count + " colorIndex:" + colorIndex);
+                dataIndex++;
+                continue;
+            }
+            byte[] rgb = colorTable[colorIndex];
+
+            // Set alpha
+            byte alpha = transparentIndex >= 0 && transparentIndex == colorIndex ? (byte) 0 : (byte) 255;
+
+            if (alpha != 0 || useBeforeTex == false) {
+                Color32 col = new Color32 (rgb[0], rgb[1], rgb[2], alpha);
+                tex.SetPixel (x, y, col);
+            }
+
+            dataIndex++;
+        }
+    }
+
+    #endregion
+
+    #region Decode LZW & Sort interrace methods
 
     /// <summary>
     /// GIF LZW decode
@@ -387,6 +541,8 @@ public static partial class UniGif
 
         return newArr;
     }
+
+    #endregion
 }
 
 /// <summary>

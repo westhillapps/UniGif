@@ -53,12 +53,20 @@ public class UniGifTexture : MonoBehaviour
     // GIF image url (WEB or StreamingAssets path)
     [SerializeField]
     string loadOnStartUrl;
+    // Use coroutine flag to GetTextureList
+    [SerializeField]
+    bool useCoroutineGetTexture;
+    // Rotating on loading
+    [SerializeField]
+    bool rotateToLoading;
     // Debug log flag
     [SerializeField]
     bool outputDebugLog;
 
     // Decoded GIF texture list
     List<UniGif.GifTexture> gifTexList = new List<UniGif.GifTexture> ();
+    // Loading flag
+    bool loading;
 
     /// <summary>
     /// Animation loop count (0 is infinite)
@@ -97,6 +105,14 @@ public class UniGifTexture : MonoBehaviour
         }
     }
 
+    void Update ()
+    {
+        // Loading is rotate
+        if (rotateToLoading && loading) {
+            transform.Rotate (0f, 0f, 30f * Time.deltaTime, Space.Self);
+        }
+    }
+
     /// <summary>
     /// Set GIF texture from url
     /// </summary>
@@ -109,6 +125,8 @@ public class UniGifTexture : MonoBehaviour
             Debug.LogError ("URL is nothing.");
             yield break;
         }
+
+        loading = true;
 
         string path;
         if (url.StartsWith ("http")) {
@@ -127,21 +145,42 @@ public class UniGifTexture : MonoBehaviour
                 Debug.LogError ("File load error.\n" + www.error);
 
             } else {
-                // Get GIF textures
-                int loop, w, h;
                 gifTexList.Clear ();
-                gifTexList = UniGif.GetTextureList (www.bytes, out loop, out w, out h, filterMode, wrapMode, outputDebugLog);
-                loopCount = loop;
-                width = w;
-                height = h;
 
-                state = STATE.READY;
+                // Get GIF textures
+                if (useCoroutineGetTexture) {
+                    // use coroutine (avoid lock up but more slow)
+                    yield return StartCoroutine (UniGif.GetTextureListCoroutine (this, www.bytes, (gtList, loop, w, h) => {
+                        gifTexList = gtList;
+                        FinishedGetTextureList (loop, w, h, autoPlay);
+                    }, filterMode, wrapMode, outputDebugLog));
 
-                if (autoPlay) {
-                    // Start GIF animation
-                    StartCoroutine (GifLoopCoroutine ());
+                }else {
+                    // dont use coroutine (there is a possibility of lock up)
+                    int loop, w, h;
+                    gifTexList = UniGif.GetTextureList (www.bytes, out loop, out w, out h, filterMode, wrapMode, outputDebugLog);
+                    FinishedGetTextureList (loop, w, h, autoPlay);
                 }
             }
+        }
+    }
+    
+    /// <summary>
+    /// Finished UniGif.GetTextureList or UniGif.GetTextureListCoroutine
+    /// </summary>
+    void FinishedGetTextureList (int loop, int w, int h, bool autoPlay)
+    {
+        loading = false;
+        loopCount = loop;
+        width = w;
+        height = h;
+        state = STATE.READY;
+        if (rotateToLoading) {
+            transform.localEulerAngles = Vector3.zero;
+        }
+        if (autoPlay) {
+            // Start GIF animation
+            StartCoroutine (GifLoopCoroutine ());
         }
     }
 
