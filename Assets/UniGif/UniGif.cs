@@ -60,7 +60,7 @@ public static partial class UniGif
     /// <param name="wrapMode">Textures wrap mode</param>
     /// <param name="debugLog">Debug Log Flag</param>
     /// <returns>IEnumerator</returns>
-    public static IEnumerator GetTextureListCoroutine(MonoBehaviour mb, byte[] bytes, Action<List<GifTexture>, int, int, int> cb,
+    public static IEnumerator GetTextureListCoroutine (MonoBehaviour mb, byte[] bytes, Action<List<GifTexture>, int, int, int> cb,
         FilterMode filterMode = FilterMode.Bilinear, TextureWrapMode wrapMode = TextureWrapMode.Clamp, bool debugLog = false)
     {
         int loopCount = -1;
@@ -82,7 +82,7 @@ public static partial class UniGif
 
         // Decode to textures from GIF data
         List<GifTexture> gifTexList = null;
-        yield return mb.StartCoroutine (UniGif.DecodeTextureCoroutine (gifData, gtList=>{
+        yield return mb.StartCoroutine (UniGif.DecodeTextureCoroutine (gifData, gtList => {
             gifTexList = gtList;
         }, filterMode, wrapMode));
 

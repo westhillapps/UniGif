@@ -58,7 +58,7 @@ public class UniGifTexture : MonoBehaviour
     bool useCoroutineGetTexture;
     // Rotating on loading
     [SerializeField]
-    bool rotateToLoading;
+    bool rotateOnLoading;
     // Debug log flag
     [SerializeField]
     bool outputDebugLog;
@@ -107,8 +107,7 @@ public class UniGifTexture : MonoBehaviour
 
     void Update ()
     {
-        // Loading is rotate
-        if (rotateToLoading && loading) {
+        if (rotateOnLoading && loading) {
             transform.Rotate (0f, 0f, 30f * Time.deltaTime, Space.Self);
         }
     }
@@ -155,7 +154,7 @@ public class UniGifTexture : MonoBehaviour
                         FinishedGetTextureList (loop, w, h, autoPlay);
                     }, filterMode, wrapMode, outputDebugLog));
 
-                }else {
+                } else {
                     // dont use coroutine (there is a possibility of lock up)
                     int loop, w, h;
                     gifTexList = UniGif.GetTextureList (www.bytes, out loop, out w, out h, filterMode, wrapMode, outputDebugLog);
@@ -164,7 +163,7 @@ public class UniGifTexture : MonoBehaviour
             }
         }
     }
-    
+
     /// <summary>
     /// Finished UniGif.GetTextureList or UniGif.GetTextureListCoroutine
     /// </summary>
@@ -175,7 +174,7 @@ public class UniGifTexture : MonoBehaviour
         width = w;
         height = h;
         state = STATE.READY;
-        if (rotateToLoading) {
+        if (rotateOnLoading) {
             transform.localEulerAngles = Vector3.zero;
         }
         if (autoPlay) {

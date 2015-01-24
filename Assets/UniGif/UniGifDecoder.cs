@@ -99,8 +99,8 @@ public static partial class UniGif
             return false;
         }
 
-        Color32? bgColor = GetGlobalBgColor(gifData);
-        
+        Color32? bgColor = GetGlobalBgColor (gifData);
+
         // Disposal Method
         // 0 (No disposal specified)
         // 1 (Do not dispose)
