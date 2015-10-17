@@ -57,3 +57,8 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+
+License (sample gif image)
+-------
+![UnityChanLicense](http://unity-chan.com/images/imageLicenseLogo.png)    
+These contents are licensed under the [“Unity-Chan” License Terms and Conditions](http://unity-chan.com/contents/guideline_en/).
