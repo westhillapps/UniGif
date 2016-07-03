@@ -8,7 +8,7 @@ GIF image decoder for Unity.
 Get a texture list by decoding a GIF file in runtime.  
 Supports GIF87a or GIF89a format. (Animation, Transparent, Interlaced, etc)  
 
-It is made with Unity4.3.4 (Mac, Win, Android, iOS), work probably also in other versions.
+It is made with Unity5.0.4 (Mac, Win, Android, iOS), work probably also in other versions.
 
 ![GIFAnimSample](https://raw.githubusercontent.com/WestHillApps/westhillapps.github.io/master/res/unigif_sample.gif)
 
@@ -23,11 +23,11 @@ List<UniGif.GifTexture> gifTexList = UniGif.GetTextureList (www.bytes, out loopC
 
 For more information, Please check the example scene and example components.  
 * example scene - (Assets/UniGif/Example/UniGifExample.unity)  
-* example component - (Assets/UniGif/Example/Script/UniGifTexture.cs)
+* example component - (Assets/UniGif/Example/Script/UniGifImage.cs)
 
 Developed By
 -------
-WestHillApps (Hironari Nishioka) - <xnininix@gmail.com>
+WestHillApps (Hironari Nishioka) - <nishioka-h@westhillapps.com>
 
 <a href="https://twitter.com/westhillapps">
 <img alt="Follow me on Twitter"

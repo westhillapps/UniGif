@@ -5,10 +5,10 @@ This software is released under the MIT License.
 http://opensource.org/licenses/mit-license.php
 */
 
-using UnityEngine;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
 
 public static partial class UniGif
 {
@@ -23,7 +23,7 @@ public static partial class UniGif
     /// <param name="wrapMode">Textures wrap mode</param>
     /// <param name="debugLog">Debug Log Flag</param>
     /// <returns>GIF texture list</returns>
-    public static List<GifTexture> GetTextureList (byte[] bytes, out int loopCount, out int width, out int height,
+    public static List<GifTexture> GetTextureList(byte[] bytes, out int loopCount, out int width, out int height,
         FilterMode filterMode = FilterMode.Bilinear, TextureWrapMode wrapMode = TextureWrapMode.Clamp, bool debugLog = false)
     {
         loopCount = -1;
@@ -31,22 +31,24 @@ public static partial class UniGif
         height = 0;
 
         // Set GIF data
-        var gifData = new GifData ();
-        if (SetGifData (bytes, ref gifData, debugLog) == false) {
-            Debug.LogError ("GIF file data set error.");
+        var gifData = new GifData();
+        if (SetGifData(bytes, ref gifData, debugLog) == false)
+        {
+            Debug.LogError("GIF file data set error.");
             return null;
         }
 
         // Decode to textures from GIF data
-        var gifTexList = new List<GifTexture> ();
-        if (DecodeTexture (gifData, gifTexList, filterMode, wrapMode) == false) {
-            Debug.LogError ("GIF texture decode error.");
+        var gifTexList = new List<GifTexture>();
+        if (DecodeTexture(gifData, gifTexList, filterMode, wrapMode) == false)
+        {
+            Debug.LogError("GIF texture decode error.");
             return null;
         }
 
-        loopCount = gifData.appEx.loopCount;
-        width = gifData.logicalScreenWidth;
-        height = gifData.logicalScreenHeight;
+        loopCount = gifData.m_appEx.loopCount;
+        width = gifData.m_logicalScreenWidth;
+        height = gifData.m_logicalScreenHeight;
         return gifTexList;
     }
 
@@ -60,7 +62,7 @@ public static partial class UniGif
     /// <param name="wrapMode">Textures wrap mode</param>
     /// <param name="debugLog">Debug Log Flag</param>
     /// <returns>IEnumerator</returns>
-    public static IEnumerator GetTextureListCoroutine (MonoBehaviour mb, byte[] bytes, Action<List<GifTexture>, int, int, int> cb,
+    public static IEnumerator GetTextureListCoroutine(MonoBehaviour mb, byte[] bytes, Action<List<GifTexture>, int, int, int> cb,
         FilterMode filterMode = FilterMode.Bilinear, TextureWrapMode wrapMode = TextureWrapMode.Clamp, bool debugLog = false)
     {
         int loopCount = -1;
@@ -68,11 +70,13 @@ public static partial class UniGif
         int height = 0;
 
         // Set GIF data
-        var gifData = new GifData ();
-        if (SetGifData (bytes, ref gifData, debugLog) == false) {
-            Debug.LogError ("GIF file data set error.");
-            if (cb != null) {
-                cb (null, loopCount, width, height);
+        var gifData = new GifData();
+        if (SetGifData(bytes, ref gifData, debugLog) == false)
+        {
+            Debug.LogError("GIF file data set error.");
+            if (cb != null)
+            {
+                cb(null, loopCount, width, height);
             }
             yield break;
         }
@@ -82,24 +86,28 @@ public static partial class UniGif
 
         // Decode to textures from GIF data
         List<GifTexture> gifTexList = null;
-        yield return mb.StartCoroutine (UniGif.DecodeTextureCoroutine (gifData, gtList => {
+        yield return mb.StartCoroutine(UniGif.DecodeTextureCoroutine(gifData, gtList =>
+        {
             gifTexList = gtList;
         }, filterMode, wrapMode));
 
-        if (gifTexList == null) {
-            Debug.LogError ("GIF texture decode error.");
-            if (cb != null) {
-                cb (null, loopCount, width, height);
+        if (gifTexList == null)
+        {
+            Debug.LogError("GIF texture decode error.");
+            if (cb != null)
+            {
+                cb(null, loopCount, width, height);
             }
             yield break;
         }
 
-        loopCount = gifData.appEx.loopCount;
-        width = gifData.logicalScreenWidth;
-        height = gifData.logicalScreenHeight;
+        loopCount = gifData.m_appEx.loopCount;
+        width = gifData.m_logicalScreenWidth;
+        height = gifData.m_logicalScreenHeight;
 
-        if (cb != null) {
-            cb (gifTexList, loopCount, width, height);
+        if (cb != null)
+        {
+            cb(gifTexList, loopCount, width, height);
         }
     }
 }

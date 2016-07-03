@@ -5,232 +5,232 @@ This software is released under the MIT License.
 http://opensource.org/licenses/mit-license.php
 */
 
-using UnityEngine;
 using System;
-using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
 
 public static partial class UniGif
 {
     public struct GifTexture
     {
-        
-        public Texture2D texture2d;
-        
-        public float delaySec;
+        public Texture2D m_texture2d;
 
-        public GifTexture (Texture2D texture2d, float delaySec)
+        public float m_delaySec;
+
+        public GifTexture(Texture2D texture2d, float delaySec)
         {
-            this.texture2d = texture2d;
-            this.delaySec = delaySec;
+            m_texture2d = texture2d;
+            m_delaySec = delaySec;
         }
     }
 
     /// <summary>
     /// GIF Data Format
     /// </summary>
-    struct GifData
+    private struct GifData
     {
         // Signature
-        public byte sig0, sig1, sig2;
+        public byte m_sig0, m_sig1, m_sig2;
         // Version
-        public byte ver0, ver1, ver2;
+        public byte m_ver0, m_ver1, m_ver2;
         // Logical Screen Width
-        public ushort logicalScreenWidth;
+        public ushort m_logicalScreenWidth;
         // Logical Screen Height
-        public ushort logicalScreenHeight;
+        public ushort m_logicalScreenHeight;
         // Global Color Table Flag
-        public bool globalColorTableFlag;
+        public bool m_globalColorTableFlag;
         // Color Resolution
-        public int colorResolution;
+        public int m_colorResolution;
         // Sort Flag
-        public bool sortFlag;
+        public bool m_sortFlag;
         // Size of Global Color Table
-        public int sizeOfGlobalColorTable;
+        public int m_sizeOfGlobalColorTable;
         // Background Color Index
-        public byte bgColorIndex;
+        public byte m_bgColorIndex;
         // Pixel Aspect Ratio
-        public byte pixelAspectRatio;
+        public byte m_pixelAspectRatio;
         // Global Color Table
-        public List<byte[]> globalColorTable;
+        public List<byte[]> m_globalColorTable;
         // ImageBlock
-        public List<ImageBlock> imageBlockList;
+        public List<ImageBlock> m_imageBlockList;
         // GraphicControlExtension
-        public List<GraphicControlExtension> graphicCtrlExList;
+        public List<GraphicControlExtension> m_graphicCtrlExList;
         // Comment Extension
-        public List<CommentExtension> commentExList;
+        public List<CommentExtension> m_commentExList;
         // Plain Text Extension
-        public List<PlainTextExtension> plainTextExList;
+        public List<PlainTextExtension> m_plainTextExList;
         // Application Extension
-        public ApplicationExtension appEx;
+        public ApplicationExtension m_appEx;
         // Trailer
-        public byte trailer;
+        public byte m_trailer;
 
         public string signature
         {
             get
             {
-                char[] c = { (char) sig0, (char) sig1, (char) sig2 };
-                return new string (c);
+                char[] c = { (char)m_sig0, (char)m_sig1, (char)m_sig2 };
+                return new string(c);
             }
         }
+
         public string version
         {
             get
             {
-                char[] c = { (char) ver0, (char) ver1, (char) ver2 };
-                return new string (c);
+                char[] c = { (char)m_ver0, (char)m_ver1, (char)m_ver2 };
+                return new string(c);
             }
         }
-        public void Dump ()
+
+        public void Dump()
         {
-            Debug.Log ("GIF Type: " + signature + "-" + version);
-            Debug.Log ("Image Size: " + logicalScreenWidth + "x" + logicalScreenHeight);
-            Debug.Log ("Animation Image Count: " + imageBlockList.Count);
-            Debug.Log ("Animation Loop Count (0 is infinite): " + appEx.loopCount);
-            Debug.Log ("Application Identifier: " + appEx.applicationIdentifier);
-            Debug.Log ("Application Authentication Code: " + appEx.applicationAuthenticationCode);
+            Debug.Log("GIF Type: " + signature + "-" + version);
+            Debug.Log("Image Size: " + m_logicalScreenWidth + "x" + m_logicalScreenHeight);
+            Debug.Log("Animation Image Count: " + m_imageBlockList.Count);
+            Debug.Log("Animation Loop Count (0 is infinite): " + m_appEx.loopCount);
+            Debug.Log("Application Identifier: " + m_appEx.applicationIdentifier);
+            Debug.Log("Application Authentication Code: " + m_appEx.applicationAuthenticationCode);
         }
     }
 
     /// <summary>
     /// Image Block
     /// </summary>
-    struct ImageBlock
+    private struct ImageBlock
     {
         // Image Separator
-        public byte imageSeparator;
+        public byte m_imageSeparator;
         // Image Left Position
-        public ushort imageLeftPosition;
+        public ushort m_imageLeftPosition;
         // Image Top Position
-        public ushort imageTopPosition;
+        public ushort m_imageTopPosition;
         // Image Width
-        public ushort imageWidth;
+        public ushort m_imageWidth;
         // Image Height
-        public ushort imageHeight;
+        public ushort m_imageHeight;
         // Local Color Table Flag
-        public bool localColorTableFlag;
+        public bool m_localColorTableFlag;
         // Interlace Flag
-        public bool interlaceFlag;
+        public bool m_interlaceFlag;
         // Sort Flag
-        public bool sortFlag;
+        public bool m_sortFlag;
         // Size of Local Color Table
-        public int sizeOfLocalColorTable;
+        public int m_sizeOfLocalColorTable;
         // Local Color Table
-        public List<byte[]> localColorTable;
+        public List<byte[]> m_localColorTable;
         // LZW Minimum Code Size
-        public byte LzwMinimumCodeSize;
+        public byte m_lzwMinimumCodeSize;
         // Block Size & Image Data List
-        public List<ImageDataBlock> imageDataList;
+        public List<ImageDataBlock> m_imageDataList;
 
         public struct ImageDataBlock
         {
             // Block Size
-            public byte blockSize;
+            public byte m_blockSize;
             // Image Data
-            public byte[] imageData;
+            public byte[] m_imageData;
         }
     }
 
     /// <summary>
     /// Graphic Control Extension
     /// </summary>
-    struct GraphicControlExtension
+    private struct GraphicControlExtension
     {
         // Extension Introducer
-        public byte extensionIntroducer;
+        public byte m_extensionIntroducer;
         // Graphic Control Label
-        public byte graphicControlLabel;
+        public byte m_graphicControlLabel;
         // Block Size
-        public byte blockSize;
+        public byte m_blockSize;
         // Disposal Mothod
-        public ushort disposalMethod;
+        public ushort m_disposalMethod;
         // Transparent Color Flag
-        public bool transparentColorFlag;
+        public bool m_transparentColorFlag;
         // Delay Time
-        public ushort delayTime;
+        public ushort m_delayTime;
         // Transparent Color Index
-        public byte transparentColorIndex;
+        public byte m_transparentColorIndex;
         // Block Terminator
-        public byte blockTerminator;
+        public byte m_blockTerminator;
     }
 
     /// <summary>
     /// Comment Extension
     /// </summary>
-    struct CommentExtension
+    private struct CommentExtension
     {
         // Extension Introducer
-        public byte extensionIntroducer;
+        public byte m_extensionIntroducer;
         // Comment Label
-        public byte commentLabel;
+        public byte m_commentLabel;
         // Block Size & Comment Data List
-        public List<CommentDataBlock> commentDataList;
+        public List<CommentDataBlock> m_commentDataList;
 
         public struct CommentDataBlock
         {
             // Block Size
-            public byte blockSize;
+            public byte m_blockSize;
             // Image Data
-            public byte[] commentData;
+            public byte[] m_commentData;
         }
     }
 
     /// <summary>
     /// Plain Text Extension
     /// </summary>
-    struct PlainTextExtension
+    private struct PlainTextExtension
     {
         // Extension Introducer
-        public byte extensionIntroducer;
+        public byte m_extensionIntroducer;
         // Plain Text Label
-        public byte plainTextLabel;
+        public byte m_plainTextLabel;
         // Block Size
-        public byte blockSize;
+        public byte m_blockSize;
         // Block Size & Plain Text Data List
-        public List<PlainTextDataBlock> plainTextDataList;
-        
+        public List<PlainTextDataBlock> m_plainTextDataList;
+
         public struct PlainTextDataBlock
         {
             // Block Size
-            public byte blockSize;
+            public byte m_blockSize;
             // Plain Text Data
-            public byte[] plainTextData;
+            public byte[] m_plainTextData;
         }
     }
 
     /// <summary>
     /// Application Extension
     /// </summary>
-    struct ApplicationExtension
+    private struct ApplicationExtension
     {
         // Extension Introducer
-        public byte extensionIntroducer;
+        public byte m_extensionIntroducer;
         // Extension Label
-        public byte extensionLabel;
+        public byte m_extensionLabel;
         // Block Size
-        public byte blockSize;
+        public byte m_blockSize;
         // Application Identifier
-        public byte appId1, appId2, appId3, appId4, appId5, appId6, appId7, appId8;
+        public byte m_appId1, m_appId2, m_appId3, m_appId4, m_appId5, m_appId6, m_appId7, m_appId8;
         // Application Authentication Code
-        public byte appAuthCode1, appAuthCode2, appAuthCode3;
+        public byte m_appAuthCode1, m_appAuthCode2, m_appAuthCode3;
         // Block Size & Application Data List
-        public List<ApplicationDataBlock> appDataList;
+        public List<ApplicationDataBlock> m_appDataList;
 
         public struct ApplicationDataBlock
         {
             // Block Size
-            public byte blockSize;
+            public byte m_blockSize;
             // Application Data
-            public byte[] applicationData;
+            public byte[] m_applicationData;
         }
 
         public string applicationIdentifier
         {
             get
             {
-                char[] c = { (char) appId1, (char) appId2, (char) appId3, (char) appId4, (char) appId5, (char) appId6, (char) appId7, (char) appId8 };
-                return new string (c);
+                char[] c = { (char)m_appId1, (char)m_appId2, (char)m_appId3, (char)m_appId4, (char)m_appId5, (char)m_appId6, (char)m_appId7, (char)m_appId8 };
+                return new string(c);
             }
         }
 
@@ -238,21 +238,22 @@ public static partial class UniGif
         {
             get
             {
-                char[] c = { (char) appAuthCode1, (char) appAuthCode2, (char) appAuthCode3 };
-                return new string (c);
+                char[] c = { (char)m_appAuthCode1, (char)m_appAuthCode2, (char)m_appAuthCode3 };
+                return new string(c);
             }
         }
-        
+
         public int loopCount
         {
             get
             {
-                if (appDataList == null || appDataList.Count < 1 ||
-                    appDataList[0].applicationData.Length < 3 ||
-                    appDataList[0].applicationData[0] != 0x01) {
+                if (m_appDataList == null || m_appDataList.Count < 1 ||
+                    m_appDataList[0].m_applicationData.Length < 3 ||
+                    m_appDataList[0].m_applicationData[0] != 0x01)
+                {
                     return 0;
                 }
-                return BitConverter.ToUInt16 (appDataList[0].applicationData, 1);
+                return BitConverter.ToUInt16(m_appDataList[0].m_applicationData, 1);
             }
         }
     }
