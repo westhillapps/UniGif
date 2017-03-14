@@ -15,7 +15,7 @@ public static partial class UniGif
     /// <summary>
     /// Gif Texture
     /// </summary>
-    public struct GifTexture
+    public class GifTexture
     {
         // Texture
         public Texture2D m_texture2d;
