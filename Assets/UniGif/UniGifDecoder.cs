@@ -258,7 +258,10 @@ public static partial class UniGif
             if (dataIndex >= decodedData.Length)
             {
                 tex.SetPixel(x, y, Color.black);
-                // Debug.LogError ("dataIndex exceeded the size of decodedData. dataIndex:" + dataIndex + " decodedData.Length:" + decodedData.Length + " y:" + y + " x:" + x);
+                if (dataIndex == decodedData.Length)
+                {
+                    Debug.LogError("dataIndex exceeded the size of decodedData. dataIndex:" + dataIndex + " decodedData.Length:" + decodedData.Length + " y:" + y + " x:" + x);
+                }
                 dataIndex++;
                 continue;
             }
