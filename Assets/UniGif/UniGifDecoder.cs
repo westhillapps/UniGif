@@ -178,9 +178,9 @@ public static partial class UniGif
     {
         // Get delay sec from GraphicControlExtension
         float delaySec = graphicCtrlEx != null ? graphicCtrlEx.Value.m_delayTime / 100f : (1f / 60f);
-        if (delaySec < 0f)
+        if (delaySec <= 0f)
         {
-            delaySec = (1f / 60f);
+            delaySec = 0.1f;
         }
         return delaySec;
     }

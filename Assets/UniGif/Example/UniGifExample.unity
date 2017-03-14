@@ -996,12 +996,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_rawImage: {fileID: 2107900797}
   m_imgAspectCtrl: {fileID: 2107900801}
-  m_filterMode: 0
+  m_filterMode: 1
   m_wrapMode: 1
   m_pauseAnimation: 0
   m_loadOnStart: 0
   m_loadOnStartUrl: 
-  m_rotateOnLoading: 0
+  m_rotateOnLoading: 1
   m_outputDebugLog: 0
 --- !u!114 &2107900801
 MonoBehaviour:
