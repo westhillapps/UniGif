@@ -18,7 +18,7 @@ Use GIF file bytes which have been taken from the WWW or StreamingAssets.
 
 ```csharp
 // Get GIF textures
-yield return StartCoroutine(UniGif.GetTextureListCoroutine(www.bytes, (gifTexList, loopCount, width, height) => { // Do something }));
+yield return StartCoroutine(UniGif.GetTextureListCoroutine(www.bytes, (gifTexList, loopCount, width, height) => { /* Do something */ }));
 ```
 
 For more information, Please check the example scene and example components.  
