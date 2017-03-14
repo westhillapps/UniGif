@@ -26,7 +26,6 @@ public class UniGifTest : MonoBehaviour
         }
 
         m_mutex = true;
-        m_uniGifImage.Stop();
         StartCoroutine(ViewGifCoroutine());
     }
 
