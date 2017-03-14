@@ -7,14 +7,19 @@ http://opensource.org/licenses/mit-license.php
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 
 public static partial class UniGif
 {
+    /// <summary>
+    /// Gif Texture
+    /// </summary>
     public struct GifTexture
     {
+        // Texture
         public Texture2D m_texture2d;
-
+        // Delay time until the next texture.
         public float m_delaySec;
 
         public GifTexture(Texture2D texture2d, float delaySec)
@@ -88,6 +93,16 @@ public static partial class UniGif
             Debug.Log("Image Size: " + m_logicalScreenWidth + "x" + m_logicalScreenHeight);
             Debug.Log("Animation Image Count: " + m_imageBlockList.Count);
             Debug.Log("Animation Loop Count (0 is infinite): " + m_appEx.loopCount);
+            if (m_graphicCtrlExList != null && m_graphicCtrlExList.Count > 0)
+            {
+                var sb = new StringBuilder("Animation Delay Time (1/100sec)");
+                for (int i = 0; i < m_graphicCtrlExList.Count; i++)
+                {
+                    sb.Append(", ");
+                    sb.Append(m_graphicCtrlExList[i].m_delayTime);
+                }
+                Debug.Log(sb.ToString());
+            }
             Debug.Log("Application Identifier: " + m_appEx.applicationIdentifier);
             Debug.Log("Application Authentication Code: " + m_appEx.applicationAuthenticationCode);
         }

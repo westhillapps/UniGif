@@ -48,9 +48,6 @@ public class UniGifImage : MonoBehaviour
     // GIF image url (WEB or StreamingAssets path)
     [SerializeField]
     private string m_loadOnStartUrl;
-    // Use coroutine flag to GetTextureList
-    [SerializeField]
-    private bool m_useCoroutineGetTexture;
     // Rotating on loading
     [SerializeField]
     private bool m_rotateOnLoading;
@@ -161,23 +158,12 @@ public class UniGifImage : MonoBehaviour
                 m_gifTexList.Clear();
 
                 // Get GIF textures
-                if (m_useCoroutineGetTexture)
+                yield return StartCoroutine(UniGif.GetTextureListCoroutine(www.bytes, (gifTexList, loopCount, width, height) =>
                 {
-                    // use coroutine (avoid lock up but more slow)
-                    yield return StartCoroutine(UniGif.GetTextureListCoroutine(this, www.bytes, (gtList, loop, w, h) =>
-                    {
-                        m_gifTexList = gtList;
-                        FinishedGetTextureList(loop, w, h, autoPlay);
-                    }, m_filterMode, m_wrapMode, m_outputDebugLog));
-
-                }
-                else
-                {
-                    // dont use coroutine (there is a possibility of lock up)
-                    int loop, w, h;
-                    m_gifTexList = UniGif.GetTextureList(www.bytes, out loop, out w, out h, m_filterMode, m_wrapMode, m_outputDebugLog);
-                    FinishedGetTextureList(loop, w, h, autoPlay);
-                }
+                    m_gifTexList = gifTexList;
+                    FinishedGetTextureList(loopCount, width, height, autoPlay);
+                },
+                m_filterMode, m_wrapMode, m_outputDebugLog));
             }
         }
     }

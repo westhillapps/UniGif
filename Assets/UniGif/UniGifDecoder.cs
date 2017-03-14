@@ -17,11 +17,11 @@ public static partial class UniGif
     /// Decode to textures from GIF data
     /// </summary>
     /// <param name="gifData">GIF data</param>
-    /// <param name="gifTexList">GIF texture list</param>
+    /// <param name="callback">Callback method(param is GIF texture list)</param>
     /// <param name="filterMode">Textures filter mode</param>
     /// <param name="wrapMode">Textures wrap mode</param>
     /// <returns>IEnumerator</returns>
-    private static IEnumerator DecodeTextureCoroutine(GifData gifData, Action<List<GifTexture>> cb, FilterMode filterMode, TextureWrapMode wrapMode)
+    private static IEnumerator DecodeTextureCoroutine(GifData gifData, Action<List<GifTexture>> callback, FilterMode filterMode, TextureWrapMode wrapMode)
     {
         if (gifData.m_imageBlockList == null || gifData.m_imageBlockList.Count < 1)
         {
@@ -43,92 +43,18 @@ public static partial class UniGif
 
         for (int i = 0; i < gifData.m_imageBlockList.Count; i++)
         {
-            var decodedData = GetDecodedData(gifData.m_imageBlockList[i]);
+            byte[] decodedData = GetDecodedData(gifData.m_imageBlockList[i]);
 
-            var colorTable = GetColorTable(gifData, gifData.m_imageBlockList[i], ref bgColor);
+            List<byte[]> colorTable = GetColorTable(gifData, gifData.m_imageBlockList[i], ref bgColor);
 
-            var graphicCtrlEx = GetGraphicCtrlExt(gifData, imgBlockIndex);
-
-            int transparentIndex = GetTransparentIndex(graphicCtrlEx);
-
-            // avoid lock up
-            yield return 0;
-
-            bool useBeforeTex = false;
-            var tex = CreateTexture2D(gifData, gifTexList, imgBlockIndex, disposalMethod, filterMode, wrapMode, ref useBeforeTex);
-
-            // Set pixel data
-            int dataIndex = 0;
-            // Reverse set pixels. because GIF data starts from the top left.
-            for (int y = tex.height - 1; y >= 0; y--)
-            {
-                SetTexturePixelRow(tex, y, gifData.m_imageBlockList[i], decodedData, ref dataIndex, colorTable, bgColor, transparentIndex, useBeforeTex);
-
-                // avoid lock up
-                if (y % 10 == 0)
-                {
-                    yield return 0;
-                }
-            }
-            tex.Apply();
-
-            float delaySec = GetDelaySec(graphicCtrlEx);
-
-            // Add to GIF texture list
-            gifTexList.Add(new GifTexture(tex, delaySec));
-
-            disposalMethod = GetDisposalMethod(graphicCtrlEx);
-
-            imgBlockIndex++;
-
-            // avoid lock up
-            yield return 0;
-        }
-
-        if (cb != null)
-        {
-            cb(gifTexList);
-        }
-    }
-
-    /// <summary>
-    /// Decode to textures from GIF data
-    /// </summary>
-    /// <param name="gifData">GIF data</param>
-    /// <param name="gifTexList">GIF texture list</param>
-    /// <param name="filterMode">Textures filter mode</param>
-    /// <param name="wrapMode">Textures wrap mode</param>
-    /// <returns>Result</returns>
-    private static bool DecodeTexture(GifData gifData, List<GifTexture> gifTexList, FilterMode filterMode, TextureWrapMode wrapMode)
-    {
-        if (gifData.m_imageBlockList == null || gifData.m_imageBlockList.Count < 1)
-        {
-            return false;
-        }
-
-        Color32? bgColor = GetGlobalBgColor(gifData);
-
-        // Disposal Method
-        // 0 (No disposal specified)
-        // 1 (Do not dispose)
-        // 2 (Restore to background color)
-        // 3 (Restore to previous)
-        ushort disposalMethod = 0;
-
-        int imgBlockIndex = 0;
-
-        for (int i = 0; i < gifData.m_imageBlockList.Count; i++)
-        {
-            var decodedData = GetDecodedData(gifData.m_imageBlockList[i]);
-
-            var colorTable = GetColorTable(gifData, gifData.m_imageBlockList[i], ref bgColor);
-
-            var graphicCtrlEx = GetGraphicCtrlExt(gifData, imgBlockIndex);
+            GraphicControlExtension? graphicCtrlEx = GetGraphicCtrlExt(gifData, imgBlockIndex);
 
             int transparentIndex = GetTransparentIndex(graphicCtrlEx);
 
+            yield return 0;
+
             bool useBeforeTex = false;
-            var tex = CreateTexture2D(gifData, gifTexList, imgBlockIndex, disposalMethod, filterMode, wrapMode, ref useBeforeTex);
+            Texture2D tex = CreateTexture2D(gifData, gifTexList, imgBlockIndex, disposalMethod, filterMode, wrapMode, ref useBeforeTex);
 
             // Set pixel data
             int dataIndex = 0;
@@ -139,13 +65,11 @@ public static partial class UniGif
             }
             tex.Apply();
 
+            yield return 0;
+
             float delaySec = GetDelaySec(graphicCtrlEx);
 
             // Add to GIF texture list
-            if (gifTexList == null)
-            {
-                gifTexList = new List<GifTexture>();
-            }
             gifTexList.Add(new GifTexture(tex, delaySec));
 
             disposalMethod = GetDisposalMethod(graphicCtrlEx);
@@ -153,7 +77,12 @@ public static partial class UniGif
             imgBlockIndex++;
         }
 
-        return true;
+        if (callback != null)
+        {
+            callback(gifTexList);
+        }
+
+        yield break;
     }
 
     #region Call from DecodeTexture methods
@@ -205,7 +134,7 @@ public static partial class UniGif
     /// </summary>
     private static List<byte[]> GetColorTable(GifData gifData, ImageBlock imgBlock, ref Color32? bgColor)
     {
-        var colorTable = imgBlock.m_localColorTableFlag ? imgBlock.m_localColorTable : gifData.m_globalColorTable;
+        List<byte[]> colorTable = imgBlock.m_localColorTableFlag ? imgBlock.m_localColorTable : gifData.m_globalColorTable;
 
         if (imgBlock.m_localColorTableFlag)
         {
@@ -248,11 +177,10 @@ public static partial class UniGif
     private static float GetDelaySec(GraphicControlExtension? graphicCtrlEx)
     {
         // Get delay sec from GraphicControlExtension
-        float delaySec = graphicCtrlEx != null ? (float)graphicCtrlEx.Value.m_delayTime / 100f : 0.1f;
-        // Minimum 0.1 seconds delay (because major browsers have become so...)
-        if (delaySec < 0.1f)
+        float delaySec = graphicCtrlEx != null ? graphicCtrlEx.Value.m_delayTime / 100f : (1f / 60f);
+        if (delaySec < 0f)
         {
-            delaySec = 0.1f;
+            delaySec = (1f / 60f);
         }
         return delaySec;
     }
@@ -447,7 +375,7 @@ public static partial class UniGif
 
             // Output
             // Take out 8 bits from the string.
-            var temp = Encoding.Unicode.GetBytes(entry);
+            byte[] temp = Encoding.Unicode.GetBytes(entry);
             for (int i = 0; i < temp.Length; i++)
             {
                 if (i % 2 == 0)
@@ -618,58 +546,4 @@ public static partial class UniGif
     }
 
     #endregion
-}
-
-/// <summary>
-/// Extension methods class
-/// </summary>
-public static class Extension
-{
-    /// <summary>
-    /// Convert BitArray to int (Specifies the start index and bit length)
-    /// </summary>
-    /// <param name="startIndex">Start index</param>
-    /// <param name="bitLength">Bit length</param>
-    /// <returns>Converted int</returns>
-    public static int GetNumeral(this BitArray array, int startIndex, int bitLength)
-    {
-        var newArray = new BitArray(bitLength);
-
-        for (int i = 0; i < bitLength; i++)
-        {
-            if (array.Length <= startIndex + i)
-            {
-                newArray[i] = false;
-            }
-            else
-            {
-                bool bit = array.Get(startIndex + i);
-                newArray[i] = bit;
-            }
-        }
-
-        return newArray.ToNumeral();
-    }
-
-    /// <summary>
-    /// Convert BitArray to int
-    /// </summary>
-    /// <returns>Converted int</returns>
-    public static int ToNumeral(this BitArray array)
-    {
-        if (array == null)
-        {
-            Debug.LogError("array is nothing.");
-            return 0;
-        }
-        if (array.Length > 32)
-        {
-            Debug.LogError("must be at most 32 bits long.");
-            return 0;
-        }
-
-        var result = new int[1];
-        array.CopyTo(result, 0);
-        return result[0];
-    }
 }

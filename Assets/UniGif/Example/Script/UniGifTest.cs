@@ -20,12 +20,14 @@ public class UniGifTest : MonoBehaviour
 
     public void OnButtonClicked()
     {
-        if (m_mutex == false && m_uniGifImage != null && string.IsNullOrEmpty(m_inputField.text) == false)
+        if (m_mutex || m_uniGifImage == null || string.IsNullOrEmpty(m_inputField.text))
         {
-            m_mutex = true;
-            m_uniGifImage.Stop();
-            StartCoroutine(ViewGifCoroutine());
+            return;
         }
+
+        m_mutex = true;
+        m_uniGifImage.Stop();
+        StartCoroutine(ViewGifCoroutine());
     }
 
     private IEnumerator ViewGifCoroutine()
