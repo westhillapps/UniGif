@@ -1,7 +1,9 @@
 UniGif
 ======
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](http://opensource.org/licenses/mit-license.php)
+[![GitHub License](https://img.shields.io/badge/license-MIT-blue.svg)](http://opensource.org/licenses/mit-license.php)
+[![GitHub Stars](https://img.shields.io/github/stars/WestHillApps/UniGif.svg)](https://github.com/WestHillApps/UniGif/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/WestHillApps/UniGif.svg)](https://github.com/WestHillApps/UniGif/network)
 
 GIF image decoder for Unity.  
 
@@ -36,7 +38,7 @@ src="https://raw.githubusercontent.com/WestHillApps/westhillapps.github.io/maste
 
 License
 -------
-The MIT License (MIT)
+MIT License
 
 Copyright (c) 2015 WestHillApps (Hironari Nishioka)
 
