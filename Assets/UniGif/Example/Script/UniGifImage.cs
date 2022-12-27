@@ -1,4 +1,4 @@
-﻿/*
+/*
 UniGif
 Copyright (c) 2015 WestHillApps (Hironari Nishioka)
 This software is released under the MIT License.
@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Networking;
 
 /// <summary>
 /// Texture Animation from GIF image
@@ -213,7 +214,7 @@ public class UniGifImage : MonoBehaviour
         }
 
         // Load file
-        using (WWW www = new WWW(path))
+        using (UnityWebRequest www = new UnityWebRequest(path))
         {
             yield return www;
 
@@ -227,8 +228,7 @@ public class UniGifImage : MonoBehaviour
             Clear();
             nowState = State.Loading;
 
-            // Get GIF textures
-            yield return StartCoroutine(UniGif.GetTextureListCoroutine(www.bytes, (gifTexList, loopCount, width, height) =>
+            yield return StartCoroutine(UniGif.GetTextureListCoroutine(www.downloadHandler.data, (gifTexList, loopCount, width, height) =>
             {
                 if (gifTexList != null)
                 {
