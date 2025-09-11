@@ -8,7 +8,6 @@ http://opensource.org/licenses/mit-license.php
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Text;
 using UnityEngine;
 
 public static partial class UniGif
@@ -55,17 +54,19 @@ public static partial class UniGif
             yield return 0;
 
             bool filledTexture;
-            Texture2D tex = CreateTexture2D(gifData, gifTexList, imgIndex, disposalMethodList, bgColor, filterMode, wrapMode, out filledTexture, prevImageBlock);
+            Texture2D tex = CreateTexture2D(gifData, gifTexList, imgIndex, disposalMethodList, bgColor, filterMode, wrapMode, out filledTexture, prevImageBlock, out Color32[] pixelBuffer);
 
             yield return 0;
 
-            // Set pixel data
+            // Compose frame into pixelBuffer (single upload after loop)
             int dataIndex = 0;
             // Reverse set pixels. because GIF data starts from the top left.
             for (int y = tex.height - 1; y >= 0; y--)
             {
-                SetTexturePixelRow(tex, y, imageBlock, decodedData, ref dataIndex, colorTable, bgColor, transparentIndex, filledTexture);
+                WriteTexturePixelRow(pixelBuffer, tex.width, tex.height, y, imageBlock, decodedData, ref dataIndex, colorTable, bgColor, transparentIndex, filledTexture);
             }
+
+            tex.SetPixels32(pixelBuffer);
             tex.Apply();
 
             yield return 0;
@@ -193,9 +194,9 @@ public static partial class UniGif
     }
 
     /// <summary>
-    /// Create Texture2D object and initial settings
+    /// Create Texture2D object and initial pixel buffer (no GPU upload yet)
     /// </summary>
-    private static Texture2D CreateTexture2D(GifData gifData, List<GifTexture> gifTexList, int imgIndex, List<ushort> disposalMethodList, Color32 bgColor, FilterMode filterMode, TextureWrapMode wrapMode, out bool filledTexture, ImageBlock? prevImageBlock)
+    private static Texture2D CreateTexture2D(GifData gifData, List<GifTexture> gifTexList, int imgIndex, List<ushort> disposalMethodList, Color32 bgColor, FilterMode filterMode, TextureWrapMode wrapMode, out bool filledTexture, ImageBlock? prevImageBlock, out Color32[] pixelBuffer)
     {
         filledTexture = false;
 
@@ -203,6 +204,8 @@ public static partial class UniGif
         Texture2D tex = new Texture2D(gifData.m_logicalScreenWidth, gifData.m_logicalScreenHeight, TextureFormat.ARGB32, false);
         tex.filterMode = filterMode;
         tex.wrapMode = wrapMode;
+
+        pixelBuffer = new Color32[tex.width * tex.height];
 
         // Check dispose
         ushort prevDisposal = imgIndex > 0 ? disposalMethodList[imgIndex - 1] : (ushort)2;
@@ -214,10 +217,7 @@ public static partial class UniGif
             Color32 baseFill = ForceDisposeToTransparent
                 ? new Color32(0, 0, 0, 0)
                 : bgColor;
-            Color32[] firstPix = new Color32[tex.width * tex.height];
-            for (int i = 0; i < firstPix.Length; i++) firstPix[i] = baseFill;
-            tex.SetPixels32(firstPix);
-            tex.Apply();
+            for (int i = 0; i < pixelBuffer.Length; i++) pixelBuffer[i] = baseFill;
             filledTexture = true;
             return tex;
         }
@@ -246,11 +246,8 @@ public static partial class UniGif
 
             if (useBeforeIndex < 0)
             {
-                Color32[] pix = new Color32[tex.width * tex.height];
                 Color32 fill = ForceDisposeToTransparent ? new Color32(0, 0, 0, 0) : bgColor;
-                for (int i = 0; i < pix.Length; i++) pix[i] = fill;
-                tex.SetPixels32(pix);
-                tex.Apply();
+                for (int i = 0; i < pixelBuffer.Length; i++) pixelBuffer[i] = fill;
                 filledTexture = true;
                 return tex;
             }
@@ -258,11 +255,8 @@ public static partial class UniGif
         else
         {
             // Treat as restore to background
-            Color32[] pix = new Color32[tex.width * tex.height];
             Color32 fill = ForceDisposeToTransparent ? new Color32(0, 0, 0, 0) : bgColor;
-            for (int i = 0; i < pix.Length; i++) pix[i] = fill;
-            tex.SetPixels32(pix);
-            tex.Apply();
+            for (int i = 0; i < pixelBuffer.Length; i++) pixelBuffer[i] = fill;
             filledTexture = true;
             return tex;
         }
@@ -271,8 +265,7 @@ public static partial class UniGif
         {
             filledTexture = true;
             Color32[] prevPix = gifTexList[useBeforeIndex].m_texture2d.GetPixels32();
-            Color32[] newPix = new Color32[prevPix.Length];
-            Array.Copy(prevPix, newPix, prevPix.Length);
+            Array.Copy(prevPix, pixelBuffer, prevPix.Length);
 
             // Disposal 2: clear only previous frame rect
             if (prevDisposal == 2 && prevImageBlock.HasValue)
@@ -296,41 +289,35 @@ public static partial class UniGif
                     {
                         int unityX = left + col;
                         if (unityX < 0 || unityX >= tex.width) continue;
-                        newPix[baseIndex + unityX] = clearColor;
+                        pixelBuffer[baseIndex + unityX] = clearColor;
                     }
                 }
             }
-
-            tex.SetPixels32(newPix);
-            tex.Apply();
         }
 
         return tex;
     }
 
     /// <summary>
-    /// Set texture pixel row
+    /// Write one texture row into pixel buffer (no immediate GPU call)
     /// </summary>
-    private static void SetTexturePixelRow(Texture2D tex, int y, ImageBlock imgBlock, byte[] decodedData, ref int dataIndex, List<byte[]> colorTable, Color32 bgColor, int transparentIndex, bool filledTexture)
+    private static void WriteTexturePixelRow(Color32[] pixels, int texWidth, int texHeight, int y, ImageBlock imgBlock, byte[] decodedData, ref int dataIndex, List<byte[]> colorTable, Color32 bgColor, int transparentIndex, bool filledTexture)
     {
         // Row no (0~)
-        int row = tex.height - 1 - y;
+        int row = texHeight - 1 - y;
 
-        for (int x = 0; x < tex.width; x++)
+        for (int x = 0; x < texWidth; x++)
         {
-            // Line no (0~)
-            int line = x;
-
             // Out of image blocks
             if (row < imgBlock.m_imageTopPosition ||
                 row >= imgBlock.m_imageTopPosition + imgBlock.m_imageHeight ||
-                line < imgBlock.m_imageLeftPosition ||
-                line >= imgBlock.m_imageLeftPosition + imgBlock.m_imageWidth)
+                x < imgBlock.m_imageLeftPosition ||
+                x >= imgBlock.m_imageLeftPosition + imgBlock.m_imageWidth)
             {
                 // Get pixel color from bg color
                 if (filledTexture == false)
                 {
-                    tex.SetPixel(x, y, ForceDisposeToTransparent ? new Color32(0, 0, 0, 0) : bgColor);
+                    pixels[y * texWidth + x] = ForceDisposeToTransparent ? new Color32(0, 0, 0, 0) : bgColor;
                 }
                 continue;
             }
@@ -340,7 +327,7 @@ public static partial class UniGif
             {
                 if (filledTexture == false)
                 {
-                    tex.SetPixel(x, y, ForceDisposeToTransparent ? new Color32(0, 0, 0, 0) : bgColor);
+                    pixels[y * texWidth + x] = ForceDisposeToTransparent ? new Color32(0, 0, 0, 0) : bgColor;
                     if (dataIndex == decodedData.Length)
                     {
                         Debug.LogError("dataIndex exceeded decodedData. index:" + dataIndex);
@@ -357,7 +344,7 @@ public static partial class UniGif
                 {
                     if (filledTexture == false)
                     {
-                        tex.SetPixel(x, y, ForceDisposeToTransparent ? new Color32(0, 0, 0, 0) : bgColor);
+                        pixels[y * texWidth + x] = ForceDisposeToTransparent ? new Color32(0, 0, 0, 0) : bgColor;
                         if (colorTable == null)
                         {
                             Debug.LogError("colorIndex exceeded the size of colorTable. colorTable is null. colorIndex:" + colorIndex);
@@ -381,7 +368,7 @@ public static partial class UniGif
                 {
                     // Set color
                     Color32 col = new Color32(rgb[0], rgb[1], rgb[2], alpha);
-                    tex.SetPixel(x, y, col);
+                    pixels[y * texWidth + x] = new Color32(rgb[0], rgb[1], rgb[2], alpha);
                 }
             }
 
@@ -515,20 +502,12 @@ public static partial class UniGif
             int copyLen = entry.Length;
             int remaining = needDataSize - output.Count;
             if (copyLen > remaining) copyLen = remaining;
-            if (copyLen == entry.Length)
+            for (int i = 0; i < copyLen; i++)
             {
-                // Fast
-                for (int i = 0; i < copyLen; i++)
-                {
-                    output.Add(entry[i]);
-                }
+                output.Add(entry[i]);
             }
-            else
+            if (copyLen < entry.Length)
             {
-                for (int i = 0; i < copyLen; i++)
-                {
-                    output.Add(entry[i]);
-                }
                 break; // filled needed size
             }
 
@@ -559,31 +538,6 @@ public static partial class UniGif
         }
 
         return output.ToArray();
-    }
-
-    /// <summary>
-    /// Initialize dictionary
-    /// </summary>
-    /// <param name="dic">Dictionary</param>
-    /// <param name="lzwMinimumCodeSize">LZW minimum code size</param>
-    /// <param name="lzwCodeSize">out LZW code size</param>
-    /// <param name="clearCode">out Clear code</param>
-    /// <param name="finishCode">out Finish code</param>
-    private static void InitDictionary(Dictionary<int, string> dic, int lzwMinimumCodeSize, out int lzwCodeSize, out int clearCode, out int finishCode)
-    {
-        int dicLength = (int)Math.Pow(2, lzwMinimumCodeSize);
-
-        clearCode = dicLength;
-        finishCode = clearCode + 1;
-
-        dic.Clear();
-
-        for (int i = 0; i < dicLength + 2; i++)
-        {
-            dic.Add(i, ((char)i).ToString());
-        }
-
-        lzwCodeSize = lzwMinimumCodeSize + 1;
     }
 
     /// <summary>
