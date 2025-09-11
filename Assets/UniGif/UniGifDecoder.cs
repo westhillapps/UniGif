@@ -13,6 +13,10 @@ using UnityEngine;
 
 public static partial class UniGif
 {
+    // If true, disposal method 2 regions are cleared to transparent instead of the logical screen background color.
+    // This eliminates persistent solid color boxes behind partially transparent animations.
+    private const bool ForceDisposeToTransparent = true;
+
     /// <summary>
     /// Decode to textures from GIF data
     /// </summary>
@@ -32,10 +36,12 @@ public static partial class UniGif
         List<ushort> disposalMethodList = new List<ushort>(gifData.m_imageBlockList.Count);
 
         int imgIndex = 0;
+        ImageBlock? prevImageBlock = null;
 
         for (int i = 0; i < gifData.m_imageBlockList.Count; i++)
         {
-            byte[] decodedData = GetDecodedData(gifData.m_imageBlockList[i]);
+            ImageBlock imageBlock = gifData.m_imageBlockList[i];
+            byte[] decodedData = GetDecodedData(imageBlock);
 
             GraphicControlExtension? graphicCtrlEx = GetGraphicCtrlExt(gifData, imgIndex);
 
@@ -44,12 +50,12 @@ public static partial class UniGif
             disposalMethodList.Add(GetDisposalMethod(graphicCtrlEx));
 
             Color32 bgColor;
-            List<byte[]> colorTable = GetColorTableAndSetBgColor(gifData, gifData.m_imageBlockList[i], transparentIndex, out bgColor);
+            List<byte[]> colorTable = GetColorTableAndSetBgColor(gifData, imageBlock, transparentIndex, out bgColor);
 
             yield return 0;
 
             bool filledTexture;
-            Texture2D tex = CreateTexture2D(gifData, gifTexList, imgIndex, disposalMethodList, bgColor, filterMode, wrapMode, out filledTexture);
+            Texture2D tex = CreateTexture2D(gifData, gifTexList, imgIndex, disposalMethodList, bgColor, filterMode, wrapMode, out filledTexture, prevImageBlock);
 
             yield return 0;
 
@@ -58,7 +64,7 @@ public static partial class UniGif
             // Reverse set pixels. because GIF data starts from the top left.
             for (int y = tex.height - 1; y >= 0; y--)
             {
-                SetTexturePixelRow(tex, y, gifData.m_imageBlockList[i], decodedData, ref dataIndex, colorTable, bgColor, transparentIndex, filledTexture);
+                SetTexturePixelRow(tex, y, imageBlock, decodedData, ref dataIndex, colorTable, bgColor, transparentIndex, filledTexture);
             }
             tex.Apply();
 
@@ -69,6 +75,7 @@ public static partial class UniGif
             // Add to GIF texture list
             gifTexList.Add(new GifTexture(tex, delaySec));
 
+            prevImageBlock = imageBlock;
             imgIndex++;
         }
 
@@ -116,7 +123,7 @@ public static partial class UniGif
     {
         List<byte[]> colorTable = imgBlock.m_localColorTableFlag ? imgBlock.m_localColorTable : gifData.m_globalColorTableFlag ? gifData.m_globalColorTable : null;
 
-        if (colorTable != null)
+        if (colorTable != null && gifData.m_bgColorIndex < colorTable.Count)
         {
             // Set background color from color table
             byte[] bgRgb = colorTable[gifData.m_bgColorIndex];
@@ -124,7 +131,8 @@ public static partial class UniGif
         }
         else
         {
-            bgColor = Color.black;
+            // Default: fully transparent instead of opaque black to avoid flashes.
+            bgColor = new Color32(0, 0, 0, 0);
         }
 
         return colorTable;
@@ -174,13 +182,20 @@ public static partial class UniGif
     /// </summary>
     private static ushort GetDisposalMethod(GraphicControlExtension? graphicCtrlEx)
     {
-        return graphicCtrlEx != null ? graphicCtrlEx.Value.m_disposalMethod : (ushort)2;
+        // Map 0 (unspecified) -> 1 (do not dispose)
+        ushort method = graphicCtrlEx != null ? graphicCtrlEx.Value.m_disposalMethod : (ushort)2;
+        if (method == 0)
+        {
+            method = 1;
+        }
+
+        return method;
     }
 
     /// <summary>
     /// Create Texture2D object and initial settings
     /// </summary>
-    private static Texture2D CreateTexture2D(GifData gifData, List<GifTexture> gifTexList, int imgIndex, List<ushort> disposalMethodList, Color32 bgColor, FilterMode filterMode, TextureWrapMode wrapMode, out bool filledTexture)
+    private static Texture2D CreateTexture2D(GifData gifData, List<GifTexture> gifTexList, int imgIndex, List<ushort> disposalMethodList, Color32 bgColor, FilterMode filterMode, TextureWrapMode wrapMode, out bool filledTexture, ImageBlock? prevImageBlock)
     {
         filledTexture = false;
 
@@ -190,47 +205,103 @@ public static partial class UniGif
         tex.wrapMode = wrapMode;
 
         // Check dispose
-        ushort disposalMethod = imgIndex > 0 ? disposalMethodList[imgIndex - 1] : (ushort)2;
+        ushort prevDisposal = imgIndex > 0 ? disposalMethodList[imgIndex - 1] : (ushort)2;
         int useBeforeIndex = -1;
-        if (disposalMethod == 0)
+
+        if (imgIndex == 0)
         {
-            // 0 (No disposal specified)
+            // Initial canvas: fill either background color or transparent
+            Color32 baseFill = ForceDisposeToTransparent
+                ? new Color32(0, 0, 0, 0)
+                : bgColor;
+            Color32[] firstPix = new Color32[tex.width * tex.height];
+            for (int i = 0; i < firstPix.Length; i++) firstPix[i] = baseFill;
+            tex.SetPixels32(firstPix);
+            tex.Apply();
+            filledTexture = true;
+            return tex;
         }
-        else if (disposalMethod == 1)
+
+        if (prevDisposal == 1)
         {
-            // 1 (Do not dispose)
+            // Do not dispose
             useBeforeIndex = imgIndex - 1;
         }
-        else if (disposalMethod == 2)
+        else if (prevDisposal == 2)
         {
-            // 2 (Restore to background color)
-            filledTexture = true;
-            Color32[] pix = new Color32[tex.width * tex.height];
-            for (int i = 0; i < pix.Length; i++)
-            {
-                pix[i] = bgColor;
-            }
-            tex.SetPixels32(pix);
-            tex.Apply();
+            // Restore to background
+            useBeforeIndex = imgIndex - 1;
         }
-        else if (disposalMethod == 3)
+        else if (prevDisposal == 3)
         {
             // 3 (Restore to previous)
-            for (int i = imgIndex - 1; i >= 0; i--)
+            for (int i = imgIndex - 2; i >= 0; i--)
             {
-                if (disposalMethodList[i] == 0 || disposalMethodList[i] == 1)
+                if (disposalMethodList[i] == 1)
                 {
                     useBeforeIndex = i;
                     break;
                 }
             }
+
+            if (useBeforeIndex < 0)
+            {
+                Color32[] pix = new Color32[tex.width * tex.height];
+                Color32 fill = ForceDisposeToTransparent ? new Color32(0, 0, 0, 0) : bgColor;
+                for (int i = 0; i < pix.Length; i++) pix[i] = fill;
+                tex.SetPixels32(pix);
+                tex.Apply();
+                filledTexture = true;
+                return tex;
+            }
+        }
+        else
+        {
+            // Treat as restore to background
+            Color32[] pix = new Color32[tex.width * tex.height];
+            Color32 fill = ForceDisposeToTransparent ? new Color32(0, 0, 0, 0) : bgColor;
+            for (int i = 0; i < pix.Length; i++) pix[i] = fill;
+            tex.SetPixels32(pix);
+            tex.Apply();
+            filledTexture = true;
+            return tex;
         }
 
         if (useBeforeIndex >= 0)
         {
             filledTexture = true;
-            Color32[] pix = gifTexList[useBeforeIndex].m_texture2d.GetPixels32();
-            tex.SetPixels32(pix);
+            Color32[] prevPix = gifTexList[useBeforeIndex].m_texture2d.GetPixels32();
+            Color32[] newPix = new Color32[prevPix.Length];
+            Array.Copy(prevPix, newPix, prevPix.Length);
+
+            // Disposal 2: clear only previous frame rect
+            if (prevDisposal == 2 && prevImageBlock.HasValue)
+            {
+                var prev = prevImageBlock.Value;
+                int left = prev.m_imageLeftPosition;
+                int top = prev.m_imageTopPosition;
+                int width = prev.m_imageWidth;
+                int height = prev.m_imageHeight;
+
+                Color32 clearColor = ForceDisposeToTransparent ? new Color32(0, 0, 0, 0) : bgColor;
+
+                for (int row = 0; row < height; row++)
+                {
+                    int gifYFromTop = top + row;
+                    int unityY = tex.height - 1 - gifYFromTop;
+                    if (unityY < 0 || unityY >= tex.height) continue;
+
+                    int baseIndex = unityY * tex.width;
+                    for (int col = 0; col < width; col++)
+                    {
+                        int unityX = left + col;
+                        if (unityX < 0 || unityX >= tex.width) continue;
+                        newPix[baseIndex + unityX] = clearColor;
+                    }
+                }
+            }
+
+            tex.SetPixels32(newPix);
             tex.Apply();
         }
 
@@ -259,7 +330,7 @@ public static partial class UniGif
                 // Get pixel color from bg color
                 if (filledTexture == false)
                 {
-                    tex.SetPixel(x, y, bgColor);
+                    tex.SetPixel(x, y, ForceDisposeToTransparent ? new Color32(0, 0, 0, 0) : bgColor);
                 }
                 continue;
             }
@@ -269,10 +340,10 @@ public static partial class UniGif
             {
                 if (filledTexture == false)
                 {
-                    tex.SetPixel(x, y, bgColor);
+                    tex.SetPixel(x, y, ForceDisposeToTransparent ? new Color32(0, 0, 0, 0) : bgColor);
                     if (dataIndex == decodedData.Length)
                     {
-                        Debug.LogError("dataIndex exceeded the size of decodedData. dataIndex:" + dataIndex + " decodedData.Length:" + decodedData.Length + " y:" + y + " x:" + x);
+                        Debug.LogError("dataIndex exceeded decodedData. index:" + dataIndex);
                     }
                 }
                 dataIndex++;
@@ -286,7 +357,7 @@ public static partial class UniGif
                 {
                     if (filledTexture == false)
                     {
-                        tex.SetPixel(x, y, bgColor);
+                        tex.SetPixel(x, y, ForceDisposeToTransparent ? new Color32(0, 0, 0, 0) : bgColor);
                         if (colorTable == null)
                         {
                             Debug.LogError("colorIndex exceeded the size of colorTable. colorTable is null. colorIndex:" + colorIndex);
@@ -302,9 +373,11 @@ public static partial class UniGif
                 byte[] rgb = colorTable[colorIndex];
 
                 // Set alpha
-                byte alpha = transparentIndex >= 0 && transparentIndex == colorIndex ? (byte)0 : (byte)255;
+                bool isTransparent = transparentIndex >= 0 && transparentIndex == colorIndex;
+                byte alpha = isTransparent ? (byte)0 : (byte)255;
 
-                if (filledTexture == false || alpha != 0)
+                // If transparent and we already have previous composite -> keep underlying pixel
+                if (!(filledTexture && isTransparent))
                 {
                     // Set color
                     Color32 col = new Color32(rgb[0], rgb[1], rgb[2], alpha);
@@ -329,155 +402,163 @@ public static partial class UniGif
     /// <returns>Decoded data array</returns>
     private static byte[] DecodeGifLZW(List<byte> compData, int lzwMinimumCodeSize, int needDataSize)
     {
-        int clearCode = 0;
-        int finishCode = 0;
-
-        // Initialize dictionary
-        Dictionary<int, string> dic = new Dictionary<int, string>();
-        int lzwCodeSize = 0;
-        InitDictionary(dic, lzwMinimumCodeSize, out lzwCodeSize, out clearCode, out finishCode);
-
-        // Convert to bit array
-        byte[] compDataArr = compData.ToArray();
-        var bitData = new BitArray(compDataArr);
-
-        byte[] output = new byte[needDataSize];
-        int outputAddIndex = 0;
-
-        string prevEntry = null;
-
-        bool dicInitFlag = false;
-
-        int bitDataIndex = 0;
-
-        // LZW decode loop
-        while (bitDataIndex < bitData.Length)
+        // Safety
+        if (needDataSize <= 0)
         {
-            if (dicInitFlag)
+            return new byte[0];
+        }
+        if (lzwMinimumCodeSize < 2)
+        {
+            // Per spec minimum code size for image data is at least 2 (except some malformed GIFs).
+            lzwMinimumCodeSize = 2;
+        }
+
+        // Spec values
+        int clearCode = 1 << lzwMinimumCodeSize;
+        int endCode = clearCode + 1;
+        int nextCode = endCode + 1;
+        int codeSize = lzwMinimumCodeSize + 1;
+        int codeSizeLimit = 12;
+
+        // Dictionary: index -> byte sequence
+        // Preallocate 4096 max entries
+        byte[][] dictionary = new byte[4096][];
+        for (int i = 0; i < clearCode; i++)
+        {
+            dictionary[i] = new byte[] { (byte)i };
+        }
+        dictionary[clearCode] = null; // clear
+        dictionary[endCode] = null;   // end
+
+        List<byte> output = new List<byte>(needDataSize);
+
+        int bitPos = 0;
+        int compLen = compData.Count;
+
+        byte[] previous = null;
+
+        // Helper local to read one LZW code (LSB first)
+        Func<int> readCode = () =>
+        {
+            int rawCode = 0;
+            int bitsRead = 0;
+            while (bitsRead < codeSize)
             {
-                InitDictionary(dic, lzwMinimumCodeSize, out lzwCodeSize, out clearCode, out finishCode);
-                dicInitFlag = false;
+                int byteIndex = bitPos >> 3;
+                if (byteIndex >= compLen)
+                {
+                    // Out of data
+                    return -1;
+                }
+                int bitIndexInByte = bitPos & 7;
+                int b = compData[byteIndex];
+                int bit = (b >> bitIndexInByte) & 1;
+                rawCode |= (bit << bitsRead);
+
+                bitPos++;
+                bitsRead++;
             }
+            return rawCode;
+        };
 
-            int key = bitData.GetNumeral(bitDataIndex, lzwCodeSize);
-
-            string entry = null;
-
-            if (key == clearCode)
+        while (output.Count < needDataSize)
+        {
+            int code = readCode();
+            if (code < 0)
             {
-                // Clear (Initialize dictionary)
-                dicInitFlag = true;
-                bitDataIndex += lzwCodeSize;
-                prevEntry = null;
-                continue;
-            }
-            else if (key == finishCode)
-            {
-                // Exit
-                Debug.LogWarning("early stop code. bitDataIndex:" + bitDataIndex + " lzwCodeSize:" + lzwCodeSize + " key:" + key + " dic.Count:" + dic.Count);
+                // Ran out of compressed data
                 break;
             }
-            else if (dic.ContainsKey(key))
+
+            if (code == clearCode)
             {
-                // Output from dictionary
-                entry = dic[key];
-            }
-            else if (key >= dic.Count)
-            {
-                if (prevEntry != null)
+                // Reset dictionary
+                for (int i = 0; i < clearCode; i++)
                 {
-                    // Output from estimation
-                    entry = prevEntry + prevEntry[0];
+                    dictionary[i] = new byte[] { (byte)i };
                 }
-                else
+                dictionary[clearCode] = null;
+                dictionary[endCode] = null;
+                nextCode = endCode + 1;
+                codeSize = lzwMinimumCodeSize + 1;
+                previous = null;
+                continue;
+            }
+            if (code == endCode)
+            {
+                // Normal end
+                break;
+            }
+
+            byte[] entry;
+
+            if (code < nextCode && dictionary[code] != null)
+            {
+                entry = dictionary[code];
+            }
+            else if (code == nextCode && previous != null)
+            {
+                // KwKwK case: code refers to string = previous + first(previous)
+                byte first = previous[0];
+                byte[] temp = new byte[previous.Length + 1];
+                Buffer.BlockCopy(previous, 0, temp, 0, previous.Length);
+                temp[temp.Length - 1] = first;
+                entry = temp;
+            }
+            else
+            {
+                // Malformed stream - cannot recover
+                break;
+            }
+
+            // Output entry
+            int copyLen = entry.Length;
+            int remaining = needDataSize - output.Count;
+            if (copyLen > remaining) copyLen = remaining;
+            if (copyLen == entry.Length)
+            {
+                // Fast
+                for (int i = 0; i < copyLen; i++)
                 {
-                    Debug.LogWarning("It is strange that come here. bitDataIndex:" + bitDataIndex + " lzwCodeSize:" + lzwCodeSize + " key:" + key + " dic.Count:" + dic.Count);
-                    bitDataIndex += lzwCodeSize;
-                    continue;
+                    output.Add(entry[i]);
                 }
             }
             else
             {
-                Debug.LogWarning("It is strange that come here. bitDataIndex:" + bitDataIndex + " lzwCodeSize:" + lzwCodeSize + " key:" + key + " dic.Count:" + dic.Count);
-                bitDataIndex += lzwCodeSize;
-                continue;
+                for (int i = 0; i < copyLen; i++)
+                {
+                    output.Add(entry[i]);
+                }
+                break; // filled needed size
             }
 
-            // Output
-            // Take out 8 bits from the string.
-            byte[] temp = Encoding.Unicode.GetBytes(entry);
-            for (int i = 0; i < temp.Length; i++)
+            if (previous != null && nextCode < dictionary.Length)
             {
-                if (i % 2 == 0)
+                // Add new sequence: previous + first(entry)
+                byte[] newSeq = new byte[previous.Length + 1];
+                Buffer.BlockCopy(previous, 0, newSeq, 0, previous.Length);
+                newSeq[newSeq.Length - 1] = entry[0];
+                dictionary[nextCode] = newSeq;
+                nextCode++;
+
+                // Grow code size if needed and not exceeding 12 bits
+                if (nextCode == (1 << codeSize) && codeSize < codeSizeLimit)
                 {
-                    output[outputAddIndex] = temp[i];
-                    outputAddIndex++;
+                    codeSize++;
                 }
             }
 
-            if (outputAddIndex >= needDataSize)
-            {
-                // Exit
-                break;
-            }
-
-            if (prevEntry != null)
-            {
-                // Add to dictionary
-                dic.Add(dic.Count, prevEntry + entry[0]);
-            }
-
-            prevEntry = entry;
-
-            bitDataIndex += lzwCodeSize;
-
-            if (lzwCodeSize == 3 && dic.Count >= 8)
-            {
-                lzwCodeSize = 4;
-            }
-            else if (lzwCodeSize == 4 && dic.Count >= 16)
-            {
-                lzwCodeSize = 5;
-            }
-            else if (lzwCodeSize == 5 && dic.Count >= 32)
-            {
-                lzwCodeSize = 6;
-            }
-            else if (lzwCodeSize == 6 && dic.Count >= 64)
-            {
-                lzwCodeSize = 7;
-            }
-            else if (lzwCodeSize == 7 && dic.Count >= 128)
-            {
-                lzwCodeSize = 8;
-            }
-            else if (lzwCodeSize == 8 && dic.Count >= 256)
-            {
-                lzwCodeSize = 9;
-            }
-            else if (lzwCodeSize == 9 && dic.Count >= 512)
-            {
-                lzwCodeSize = 10;
-            }
-            else if (lzwCodeSize == 10 && dic.Count >= 1024)
-            {
-                lzwCodeSize = 11;
-            }
-            else if (lzwCodeSize == 11 && dic.Count >= 2048)
-            {
-                lzwCodeSize = 12;
-            }
-            else if (lzwCodeSize == 12 && dic.Count >= 4096)
-            {
-                int nextKey = bitData.GetNumeral(bitDataIndex, lzwCodeSize);
-                if (nextKey != clearCode)
-                {
-                    dicInitFlag = true;
-                }
-            }
+            previous = entry;
         }
 
-        return output;
+        if (output.Count < needDataSize)
+        {
+            // Pad (rare; malformed GIF) with zeros to expected size
+            int pad = needDataSize - output.Count;
+            for (int i = 0; i < pad; i++) output.Add(0);
+        }
+
+        return output.ToArray();
     }
 
     /// <summary>
