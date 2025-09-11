@@ -1,11 +1,20 @@
 # ---------------[ Unity generated ]------------------ #
 [Aa]pps/
 [Ll]ibrary/
+[Ll]ogs/
 [Tt]emp/
 [Oo]bj/
 [Ss]treamingAssets/
 [Ss]treamingAssets.meta
+[Uu]ser[Ss]ettings/
 UnityGenerated/
+
+# Visual Studio cache directory
+.vs/
+.vscode/
+
+# Gradle cache directory
+.gradle/
   
 # ----[ Visual Studio / MonoDevelop generated ]------- #
   
